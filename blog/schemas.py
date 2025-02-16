@@ -21,9 +21,20 @@ class ShowUser(BaseModel):
 
 
 class ShowBlog(BaseModel):
-    title: str
+    title: str  
     body: str
     creator: ShowUser
     
     class Config():
         from_attributes = True
+
+class Login(BaseModel):
+    username: str
+    password: str
+
+class Token(BaseModel):
+    access_token: str
+    token_type: str
+
+class TokenData(BaseModel):
+    username: str | None = None
