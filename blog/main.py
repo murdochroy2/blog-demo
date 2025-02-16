@@ -3,6 +3,8 @@ from pydantic import BaseModel
 from blog import schemas, models
 from blog.database import SessionLocal, engine
 from sqlalchemy.orm import Session
+from passlib.context import CryptContext
+from blog.hashing import Hash
 
 app = FastAPI()
 
@@ -15,20 +17,20 @@ def get_db():
     finally:
         db.close()
 
-@app.post('/blog', status_code=status.HTTP_201_CREATED)
+@app.post('/blog', status_code=status.HTTP_201_CREATED, tags=["blogs"])
 def create_blog(request: schemas.Blog, db: Session = Depends(get_db)):
-    new_blog = models.Blog(title=request.title, body=request.body)
+    new_blog = models.Blog(title=request.title, body=request.body, user_id=1)
     db.add(new_blog)
     db.commit()
     db.refresh(new_blog)
     return new_blog
 
-@app.get('/blog', response_model=list[schemas.ShowBlog])
+@app.get('/blog', response_model=list[schemas.ShowBlog], tags=["blogs"])
 def get_all(db: Session = Depends(get_db)):
     blogs = db.query(models.Blog).all()
     return blogs
 
-@app.get('/blog/{id}', status_code=status.HTTP_200_OK, response_model=schemas.ShowBlog)
+@app.get('/blog/{id}', status_code=status.HTTP_200_OK, response_model=schemas.ShowBlog, tags=["blogs"])
 def show(id, db: Session = Depends(get_db)):
     blog = db.query(models.Blog).filter(models.Blog.id == id).first()
     if not blog:
@@ -37,7 +39,7 @@ def show(id, db: Session = Depends(get_db)):
         # return {'detail':f"Blog with the id {id} is not available"}
     return blog
 
-@app.delete('/blog/{id}', status_code=status.HTTP_204_NO_CONTENT)
+@app.delete('/blog/{id}', status_code=status.HTTP_204_NO_CONTENT, tags=["blogs"])
 def destroy(id, db: Session = Depends(get_db)):
     blog = db.query(models.Blog).filter(models.Blog.id==id)
     if not blog.first():
@@ -46,7 +48,7 @@ def destroy(id, db: Session = Depends(get_db)):
     db.commit()
     return 'done'
 
-@app.put('/blog/{id}', status_code=status.HTTP_202_ACCEPTED)
+@app.put('/blog/{id}', status_code=status.HTTP_202_ACCEPTED, tags=["blogs"])
 def update(id, request: schemas.Blog, db: Session = Depends(get_db)):
     blog = db.query(models.Blog).filter(models.Blog.id == id)
     if not blog.first():
@@ -55,11 +57,21 @@ def update(id, request: schemas.Blog, db: Session = Depends(get_db)):
     db.commit()
     return 'updated'
 
-@app.post('/user')
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+@app.post('/user', response_model=schemas.ShowUser)
 def create_user(request: schemas.User, db: Session = Depends(get_db)):
     # new_user = models.User(**request.model_dump())
-    new_user = models.User(**request.model_dump())
+    hashed_password = Hash.bcrypt(request.password)
+    new_user = models.User(name=request.name, email=request.email, password=hashed_password)
     db.add(new_user)
     db.commit()
     db.refresh(new_user)
     return new_user
+
+@app.get('/user/{id}', response_model=schemas.ShowUser)
+def get_user(id: int, db: Session = Depends(get_db)):
+    user = db.query(models.User).filter(models.User.id == id).first()
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail={'detail':f"User with id {id} not found"})
+    return user
